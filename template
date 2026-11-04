@@ -1,0 +1,13 @@
+# Template file for 'tundra-blueice-arp'
+pkgname=tundra-blueice-arp
+version=0.1
+revision=0
+build_style=gnu-makefile
+make_check_target=check-unit
+short_desc="ARP sensor of tundra-blueice developed for Tundra OS"
+maintainer="CarlosDZ <none@example.com>"
+license="GPL-3.0-or-later"
+homepage="https://github.com/CarlosDZ/tundra-blueice-arp"
+distfiles="https://github.com/CarlosDZ/tundra-blueice-arp/archive/refs/tags/v${version}_${revision}.tar.gz"
+checksum=@@CHECKSUM@@
+
