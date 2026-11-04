@@ -3,6 +3,7 @@
 #include "arp.h"
 #include "conflict.h"
 #include "decide.h"
+#include "emit.h"
 #include "history.h"
 #include "iface.h"
 #include "mac.h"
@@ -35,11 +36,9 @@ static int on_conflict(struct history *h, const char *ifname, uint32_t ip,
 		enum action act;
 		const struct alert_def *def = decide_alert(alert_case(kind), acc, &act);
 		struct alert a;
-		char line[1024];
 		alert_init(&a, def->kase);
-		decide_probe_info(&a, kind, &cs, ip, m);
-		if (alert_format(line, sizeof(line), &a, act, ifname, wall_ms()) == 0)
-			fprintf(stderr, "%s\n", line);
+		decide_addr_info(&a, kind, &cs, ip, m);
+		emit_alert(&a, act, ifname);
 		if (act == ACT_STOP)
 			return ALERT_CODE;
 	}
@@ -88,8 +87,11 @@ static int probe_loop(int fd, int ifindex, const unsigned char mine[ETH_ALEN],
 		while ((n = arp_read(fd, &m)) > 0)
 			if (decide_probe_conflict(&m, ip, mine))
 				return on_conflict(h, ifname, ip, &m, acc);
-		if (n < 0)
+		if (n < 0) {
+			if (errno == ENETDOWN)
+				fprintf(stderr, "interface %s is down\n", ifname);
 			return 1;
+		}
 	}
 }
 

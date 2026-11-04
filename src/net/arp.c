@@ -82,7 +82,8 @@ int arp_read(int fd, struct arp_msg *m) {
 	if (n < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
 			return 0;
-		perror("recvfrom error");
+		if (errno != ENETDOWN)
+			perror("recvfrom error");
 		return -1;
 	}
 	if ((size_t)n < sizeof(p) || p.htype != htons(1) ||

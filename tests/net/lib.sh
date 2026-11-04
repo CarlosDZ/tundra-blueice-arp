@@ -13,6 +13,7 @@ WORK=$(mktemp -d /tmp/tba-test.XXXXXX)
 OUT=$WORK/out
 ERR=$WORK/err
 HISTORY=/run/tundra/blueice/arp
+ADDR=$NET.10
 
 PASS=0
 FAIL=0
@@ -128,6 +129,53 @@ probe() {
 	run probe "$IF" "$@"
 }
 
+start_watch() {
+	run_bg watch "$IF" addr "$ADDR" "$@"
+}
+
+stop_watch() {
+	kill -TERM "$RUN_PID" 2>/dev/null
+	wait_run
+}
+
+wait_out() {
+	n=$(($2 * 10))
+	while [ "$n" -gt 0 ]; do
+		grep -q -- "$1" "$OUT" 2>/dev/null && return 0
+		sleep 0.1
+		n=$((n - 1))
+	done
+	return 1
+}
+
+expect_out_in() {
+	if wait_out "$1" "$2"; then
+		ok "$3"
+	else
+		not_ok "$3"
+		dump
+	fi
+}
+
+wait_exit() {
+	n=$(($1 * 10))
+	while kill -0 "$RUN_PID" 2>/dev/null; do
+		[ "$n" -le 0 ] && return 1
+		sleep 0.1
+		n=$((n - 1))
+	done
+	wait_run
+	return 0
+}
+
+running() {
+	kill -0 "$RUN_PID" 2>/dev/null
+}
+
+err_lines() {
+	[ "$(grep -c -- "$1" "$ERR")" -eq "$2" ]
+}
+
 reset_history() {
 	rm -f "$HISTORY/$IF" "$HISTORY/$IF.lock" "$HISTORY/$IF.tmp"
 }
@@ -179,6 +227,7 @@ setup() {
 	ip link set "$EVIF" netns "$EVIL"
 	ip link set "${EVIF}p" master "$BR" up
 	in_evil ip link set "$EVIF" up
+	in_ns ip addr add "$ADDR/24" dev "$IF"
 }
 
 teardown() {

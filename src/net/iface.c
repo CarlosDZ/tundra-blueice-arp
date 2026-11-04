@@ -35,3 +35,7 @@ int iface_lookup(const char *ifname, int *ifindex,
 	memcpy(mac, ifr.ifr_hwaddr.sa_data, ETH_ALEN);
 	return 0;
 }
+
+int iface_alive(const char *ifname, int ifindex) {
+	return if_nametoindex(ifname) == (unsigned int)ifindex;
+}
