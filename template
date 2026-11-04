@@ -10,4 +10,3 @@ license="GPL-3.0-or-later"
 homepage="https://github.com/CarlosDZ/tundra-blueice-arp"
 distfiles="https://github.com/CarlosDZ/tundra-blueice-arp/archive/refs/tags/v${version}_${revision}.tar.gz"
 checksum=@@CHECKSUM@@
-

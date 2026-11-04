@@ -23,5 +23,8 @@ int main(void) {
 	CHECK(!mac_frame_forged(host, host), "matching MACs are not forged");
 	CHECK(mac_frame_forged(host, other),
 	      "an ARP sender different from the frame source is forged");
+	char buf[18];
+	CHECK(strcmp(mac_format(host, buf), "02:aa:aa:aa:aa:01") == 0,
+	      "formats a MAC in lowercase hex");
 	return test_summary();
 }

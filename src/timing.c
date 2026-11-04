@@ -9,6 +9,12 @@ uint64_t now_ms(void) {
 	return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
 }
 
+uint64_t wall_ms(void) {
+	struct timespec ts;
+	clock_gettime(CLOCK_REALTIME, &ts);
+	return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+}
+
 uint64_t scaled_ms(uint64_t secs) {
 	return secs * 1000 / TUNDRA_BLUEICE_ARP_TIME_SCALE;
 }

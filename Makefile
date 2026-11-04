@@ -38,6 +38,18 @@ clean:
 ## Tests
 
 TEST_BUILD = $(BUILD)/test
+TEST_BIN = $(TEST_BUILD)/tundra-blueice-arp
+TEST_TOOLS = $(patsubst tests/tools/%.c,$(TEST_BUILD)/tools/%,$(wildcard tests/tools/*.c))
+TEST_DEFS = -D_GNU_SOURCE -DTUNDRA_BLUEICE_ARP_VERSION=\"$(VERSION)-test\" \
+            -DTUNDRA_BLUEICE_ARP_TIME_SCALE=4
+
+$(TEST_BIN): FORCE
+	@mkdir -p $(dir $@)
+	$(CC) $(TUNDRA_STD) $(CFLAGS) $(TUNDRA_INC) $(TEST_DEFS) -o $@ $(SRCS)
+
+$(TEST_BUILD)/tools/%: tests/tools/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(TUNDRA_STD) $(CFLAGS) -D_GNU_SOURCE -o $@ $<
 
 UNIT_FLAGS = -g -fsanitize=address,undefined -fno-omit-frame-pointer
 UNIT_TESTS = $(patsubst tests/unit/%.c,$(TEST_BUILD)/unit/%,$(wildcard tests/unit/*.c))
@@ -50,9 +62,12 @@ $(TEST_BUILD)/unit/%: tests/unit/%.c tests/unit/test.h $(SRCS) $(HDRS)
 check-unit: $(UNIT_TESTS)
 	@rc=0; for t in $(UNIT_TESTS); do echo "# $$t"; $$t || rc=1; done; exit $$rc
 
-check: check-unit
+check: check-unit $(TEST_BIN) $(TEST_TOOLS)
+	@sh tests/net/run.sh
 
-.PHONY: install uninstall clean check check-unit
+FORCE:
+
+.PHONY: install uninstall clean check check-unit FORCE
 
 
 ## Installation
