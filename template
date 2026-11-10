@@ -1,9 +1,11 @@
 # Template file for 'tundra-blueice-arp'
 pkgname=tundra-blueice-arp
-version=0.1
+version=0.2
 revision=0
+depends="libcap-progs libseccomp"
 build_style=gnu-makefile
 make_check_target=check-unit
+makedepends="libseccomp-devel"
 short_desc="ARP sensor of tundra-blueice developed for Tundra OS"
 maintainer="CarlosDZ <none@example.com>"
 license="GPL-3.0-or-later"

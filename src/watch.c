@@ -7,6 +7,7 @@
 #include "gateway.h"
 #include "history.h"
 #include "iface.h"
+#include "lockdown.h"
 #include "mac.h"
 #include "timing.h"
 
@@ -173,7 +174,7 @@ static int on_arp(struct watch *w) {
 }
 
 static int check_down(const struct watch *w) {
-	if (!w->down || iface_alive(w->ifname, w->ifindex))
+	if (!w->down || iface_alive(w->fd, w->ifname, w->ifindex))
 		return -1;
 	fprintf(stderr, "interface %s removed\n", w->ifname);
 	return 1;
@@ -271,6 +272,13 @@ int watch_run(const char *ifname, uint32_t ip, uint32_t gw, int always,
 	}
 	w.fd = arp_open(w.ifindex);
 	if (w.fd < 0) {
+		history_close(&w.h);
+		close(sfd);
+		return 1;
+	}
+
+	if (lockdown_enter(LOCKDOWN_WATCH) < 0) {
+		close(w.fd);
 		history_close(&w.h);
 		close(sfd);
 		return 1;

@@ -36,6 +36,9 @@ int iface_lookup(const char *ifname, int *ifindex,
 	return 0;
 }
 
-int iface_alive(const char *ifname, int ifindex) {
-	return if_nametoindex(ifname) == (unsigned int)ifindex;
+int iface_alive(int fd, const char *ifname, int ifindex) {
+	struct ifreq ifr;
+	memset(&ifr, 0, sizeof(ifr));
+	strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+	return ioctl(fd, SIOCGIFINDEX, &ifr) == 0 && ifr.ifr_ifindex == ifindex;
 }

@@ -6,6 +6,7 @@
 #include "emit.h"
 #include "history.h"
 #include "iface.h"
+#include "lockdown.h"
 #include "mac.h"
 #include "timing.h"
 
@@ -49,9 +50,10 @@ static int on_conflict(struct history *h, const char *ifname, uint32_t ip,
 
 static int probe_loop(int fd, int ifindex, const unsigned char mine[ETH_ALEN],
                       struct history *h, const char *ifname, uint32_t ip,
-                      const struct accept *acc) {
+                      const struct accept *acc,
+                      const uint64_t waits[PROBE_NUM]) {
 	int probes = 0;
-	uint64_t deadline = now_ms() + random_ms(0, scaled_ms(PROBE_WAIT_S));
+	uint64_t deadline = now_ms() + waits[0];
 
 	for (;;) {
 		uint64_t now = now_ms();
@@ -64,8 +66,7 @@ static int probe_loop(int fd, int ifindex, const unsigned char mine[ETH_ALEN],
 				return 1;
 			probes++;
 			if (probes < PROBE_NUM)
-				deadline = now + random_ms(scaled_ms(PROBE_MIN_S),
-				                           scaled_ms(PROBE_MAX_S));
+				deadline = now + waits[probes];
 			else
 				deadline = now + scaled_ms(ANNOUNCE_WAIT_S);
 			continue;
@@ -110,7 +111,20 @@ int probe_run(const char *ifname, uint32_t ip, const struct accept *acc) {
 		return 1;
 	}
 
-	int ret = probe_loop(fd, ifindex, mine, &h, ifname, ip, acc);
+	/* Drawn before the lockdown: glibc's getrandom maps its vDSO state on
+	 * first use. */
+	uint64_t waits[PROBE_NUM];
+	waits[0] = random_ms(0, scaled_ms(PROBE_WAIT_S));
+	for (int i = 1; i < PROBE_NUM; i++)
+		waits[i] = random_ms(scaled_ms(PROBE_MIN_S), scaled_ms(PROBE_MAX_S));
+
+	if (lockdown_enter(LOCKDOWN_PROBE) < 0) {
+		close(fd);
+		history_close(&h);
+		return 1;
+	}
+
+	int ret = probe_loop(fd, ifindex, mine, &h, ifname, ip, acc, waits);
 	close(fd);
 	history_close(&h);
 	return ret;

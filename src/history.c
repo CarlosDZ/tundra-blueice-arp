@@ -22,6 +22,9 @@ enum {
 	K_ALL = 31
 };
 
+#define LINE_MAX_LEN 256
+#define RECORD_MAX_LEN 96
+
 static int make_dir(const char *path, mode_t mode) {
 	if (mkdir(path, mode) < 0 && errno != EEXIST) {
 		perror("mkdir error");
@@ -38,25 +41,32 @@ int history_make_dirs(void) {
 }
 
 int history_open(struct history *h, const char *dir, const char *ifname) {
+	char path[256], lock[256];
+	h->fd = -1;
 	h->lockfd = -1;
-	int n = snprintf(h->path, sizeof(h->path), "%s/%s", dir, ifname);
-	int m = snprintf(h->lock, sizeof(h->lock), "%s/%s.lock", dir, ifname);
-	if (n < 0 || m < 0 || (size_t)n >= sizeof(h->path) ||
-	    (size_t)m >= sizeof(h->lock)) {
+	int n = snprintf(path, sizeof(path), "%s/%s", dir, ifname);
+	int m = snprintf(lock, sizeof(lock), "%s/%s.lock", dir, ifname);
+	if (n < 0 || m < 0 || (size_t)n >= sizeof(path) ||
+	    (size_t)m >= sizeof(lock)) {
 		fprintf(stderr, "history path too long\n");
 		return -1;
 	}
-	h->lockfd = open(h->lock, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
-	if (h->lockfd < 0) {
+	h->lockfd = open(lock, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+	h->fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+	if (h->lockfd < 0 || h->fd < 0) {
 		perror("open error");
+		history_close(h);
 		return -1;
 	}
 	return 0;
 }
 
 void history_close(struct history *h) {
+	if (h->fd >= 0)
+		close(h->fd);
 	if (h->lockfd >= 0)
 		close(h->lockfd);
+	h->fd = -1;
 	h->lockfd = -1;
 }
 
@@ -67,12 +77,12 @@ int history_begin(struct history *h, struct conflicts *cs, uint64_t now) {
 			return -1;
 		}
 	}
-	history_load(h->path, cs, now);
+	history_load(h->fd, cs, now);
 	return 0;
 }
 
 int history_commit(struct history *h, const struct conflicts *cs) {
-	int r = history_save(h->path, cs);
+	int r = history_save(h->fd, cs);
 	flock(h->lockfd, LOCK_UN);
 	return r;
 }
@@ -142,78 +152,93 @@ static int parse_line(char *line, struct conflict *c) {
 	return seen == K_ALL ? 0 : -1;
 }
 
-int history_load(const char *path, struct conflicts *cs, uint64_t now) {
-	cs->n = 0;
-	FILE *f = fopen(path, "re");
-	if (!f)
-		return errno == ENOENT ? 0 : -1;
-
-	char line[256];
-	while (fgets(line, sizeof(line), f)) {
-		size_t len = strlen(line);
-		if (len == 0 || line[len - 1] != '\n')
-			continue;
-		line[len - 1] = '\0';
-
-		struct conflict c;
-		if (parse_line(line, &c) < 0 || c.at > now ||
-		    now - c.at >= CONFLICT_WINDOW_MS)
-			continue;
-		if (cs->n == CONFLICT_MAX) {
-			memmove(&cs->recs[0], &cs->recs[1],
-			        (CONFLICT_MAX - 1) * sizeof(cs->recs[0]));
-			cs->n--;
-		}
-		cs->recs[cs->n++] = c;
+static void add_line(char *line, struct conflicts *cs, uint64_t now) {
+	struct conflict c;
+	if (parse_line(line, &c) < 0 || c.at > now ||
+	    now - c.at >= CONFLICT_WINDOW_MS)
+		return;
+	if (cs->n == CONFLICT_MAX) {
+		memmove(&cs->recs[0], &cs->recs[1],
+		        (CONFLICT_MAX - 1) * sizeof(cs->recs[0]));
+		cs->n--;
 	}
-	fclose(f);
+	cs->recs[cs->n++] = c;
+}
+
+int history_load(int fd, struct conflicts *cs, uint64_t now) {
+	char buf[LINE_MAX_LEN];
+	size_t have = 0;
+	off_t off = 0;
+	int skip = 0;
+
+	cs->n = 0;
+	for (;;) {
+		ssize_t n = pread(fd, buf + have, sizeof(buf) - have, off);
+		if (n < 0) {
+			if (errno == EINTR)
+				continue;
+			return -1;
+		}
+		if (n == 0)
+			return 0;
+		off += n;
+		have += (size_t)n;
+
+		char *start = buf, *nl;
+		while ((nl = memchr(start, '\n', (size_t)(buf + have - start)))) {
+			*nl = '\0';
+			if (!skip)
+				add_line(start, cs, now);
+			skip = 0;
+			start = nl + 1;
+		}
+		have = (size_t)(buf + have - start);
+		memmove(buf, start, have);
+		if (have == sizeof(buf)) {
+			have = 0;
+			skip = 1;
+		}
+	}
+}
+
+static int write_all(int fd, const char *buf, size_t len) {
+	size_t done = 0;
+	while (done < len) {
+		ssize_t n = pwrite(fd, buf + done, len - done, (off_t)done);
+		if (n < 0) {
+			if (errno == EINTR)
+				continue;
+			return -1;
+		}
+		done += (size_t)n;
+	}
 	return 0;
 }
 
-int history_save(const char *path, const struct conflicts *cs) {
-	char tmp[272];
-	int n = snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-	if (n < 0 || (size_t)n >= sizeof(tmp))
-		return -1;
-
-	int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
-	if (fd < 0) {
-		perror("open error");
-		return -1;
-	}
-	FILE *f = fdopen(fd, "w");
-	if (!f) {
-		perror("fdopen error");
-		close(fd);
-		unlink(tmp);
-		return -1;
-	}
+int history_save(int fd, const struct conflicts *cs) {
+	char out[CONFLICT_MAX * RECORD_MAX_LEN];
+	size_t len = 0;
 
 	for (int i = 0; i < cs->n; i++) {
 		const struct conflict *c = &cs->recs[i];
 		char a[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &c->addr, a, sizeof(a));
-		fprintf(f,
-		        "at %llu addr %s mac %02x:%02x:%02x:%02x:%02x:%02x bound %d "
-		        "forged %d\n",
-		        (unsigned long long)c->at, a, c->mac[0], c->mac[1], c->mac[2],
-		        c->mac[3], c->mac[4], c->mac[5], c->bound, c->forged);
+		int n = snprintf(
+		    out + len, sizeof(out) - len,
+		    "at %llu addr %s mac %02x:%02x:%02x:%02x:%02x:%02x bound %d "
+		    "forged %d\n",
+		    (unsigned long long)c->at, a, c->mac[0], c->mac[1], c->mac[2],
+		    c->mac[3], c->mac[4], c->mac[5], c->bound, c->forged);
+		if (n < 0 || (size_t)n >= sizeof(out) - len)
+			return -1;
+		len += (size_t)n;
 	}
 
-	if (fflush(f) != 0 || fsync(fd) < 0) {
+	/* Rewritten in place through the descriptor opened at start: after the
+	 * lockdown no file can be opened or renamed. A torn write leaves lines
+	 * that history_load drops. */
+	if (write_all(fd, out, len) < 0 || ftruncate(fd, (off_t)len) < 0) {
 		perror("write error");
-		fclose(f);
-		unlink(tmp);
-		return -1;
-	}
-	if (fclose(f) != 0) {
-		perror("fclose error");
-		unlink(tmp);
-		return -1;
-	}
-	if (rename(tmp, path) < 0) {
-		perror("rename error");
-		unlink(tmp);
 		return -1;
 	}
 	return 0;

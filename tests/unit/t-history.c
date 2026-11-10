@@ -13,6 +13,8 @@ static const unsigned char other[ETH_ALEN] = {2, 0xbb, 0xbb, 0xbb, 0xbb, 1};
 
 static uint32_t ip(int n) { return htonl((uint32_t)(0x0a4d0000 | n)); }
 
+static int fd;
+
 static void write_file(const char *content) {
 	FILE *f = fopen(path, "w");
 	if (f) {
@@ -28,8 +30,8 @@ static void test_roundtrip(void) {
 	conflict_probe(&cs, ip(100), evil, evil, 1 * S, &k);
 	conflict_claim(&cs, ip(5), other, evil, 2 * S, &k);
 
-	CHECK(history_save(path, &cs) == 0, "saves the history");
-	CHECK(history_load(path, &back, 3 * S) == 0 && back.n == 2,
+	CHECK(history_save(fd, &cs) == 0, "saves the history");
+	CHECK(history_load(fd, &back, 3 * S) == 0 && back.n == 2,
 	      "loads every record back");
 	CHECK(back.recs[0].at == 1 * S && back.recs[0].addr == ip(100) &&
 	          memcmp(back.recs[0].mac, evil, ETH_ALEN) == 0 &&
@@ -59,8 +61,8 @@ static void test_window(void) {
 	    "at 300000 addr 10.77.0.2 mac 02:aa:aa:aa:aa:01 bound 0 forged 0\n"
 	    "at 999999 addr 10.77.0.3 mac 02:aa:aa:aa:aa:01 bound 0 forged "
 	    "0\n");
-	CHECK(history_load(path, &cs, CONFLICT_WINDOW_MS + 1001) == 0 &&
-	          cs.n == 1 && cs.recs[0].addr == ip(2),
+	CHECK(history_load(fd, &cs, CONFLICT_WINDOW_MS + 1001) == 0 && cs.n == 1 &&
+	          cs.recs[0].addr == ip(2),
 	      "drops records outside the window and from the future");
 }
 
@@ -74,7 +76,7 @@ static void test_tolerance(void) {
 	           "at 5 addr 10.77.0.5 mac 02:aa:aa:aa:aa:01 bound 1 forged 0 "
 	           "future 7\n"
 	           "at 6 addr 10.77.0.6 mac 02:aa");
-	CHECK(history_load(path, &cs, 10) == 0 && cs.n == 2 &&
+	CHECK(history_load(fd, &cs, 10) == 0 && cs.n == 2 &&
 	          cs.recs[0].addr == ip(1) && cs.recs[1].addr == ip(5),
 	      "drops malformed lines, keeps the rest and ignores unknown keys");
 
@@ -88,14 +90,32 @@ static void test_tolerance(void) {
 		strcat(many, l);
 	}
 	write_file(many);
-	CHECK(history_load(path, &cs, 100) == 0 && cs.n == CONFLICT_MAX &&
+	CHECK(history_load(fd, &cs, 100) == 0 && cs.n == CONFLICT_MAX &&
 	          cs.recs[0].addr == ip(5) &&
 	          cs.recs[CONFLICT_MAX - 1].addr == ip(20),
 	      "keeps the latest records within the limit");
 
-	unlink(path);
-	CHECK(history_load(path, &cs, 100) == 0 && cs.n == 0,
-	      "a missing file is an empty history");
+	write_file("");
+	CHECK(history_load(fd, &cs, 100) == 0 && cs.n == 0,
+	      "an empty file is an empty history");
+
+	struct conflicts one;
+	enum alert_kind k;
+	write_file(many);
+	conflicts_init(&one, 10 * S, 0);
+	conflict_probe(&one, ip(9), evil, evil, 50, &k);
+	CHECK(history_save(fd, &one) == 0 && history_load(fd, &cs, 100) == 0 &&
+	          cs.n == 1 && cs.recs[0].addr == ip(9),
+	      "a shorter history leaves nothing of the longer one");
+
+	char longline[700];
+	memset(longline, 'x', sizeof(longline));
+	snprintf(longline + 600, sizeof(longline) - 600,
+	         "\nat 7 addr 10.77.0.7 mac 02:aa:aa:aa:aa:01 bound 0 forged 0\n");
+	write_file(longline);
+	CHECK(history_load(fd, &cs, 100) == 0 && cs.n == 1 &&
+	          cs.recs[0].addr == ip(7),
+	      "skips an overlong line and keeps the next one");
 }
 
 static void test_writers(void) {
@@ -121,7 +141,7 @@ static void test_writers(void) {
 
 	char hp[300];
 	snprintf(hp, sizeof(hp), "%s/tdc0", dir);
-	CHECK(history_load(hp, &back, 12 * S) == 0 && back.n == 2,
+	CHECK(history_load(h1.fd, &back, 12 * S) == 0 && back.n == 2,
 	      "no record is lost between writers");
 	history_close(&h1);
 	history_close(&h2);
@@ -141,6 +161,9 @@ int main(void) {
 	if (!freopen("/dev/null", "w", stderr) || !mkdtemp(dir))
 		return 1;
 	snprintf(path, sizeof(path), "%s/hist", dir);
+	fd = open(path, O_RDWR | O_CREAT, 0600);
+	if (fd < 0)
+		return 1;
 
 	test_roundtrip();
 	test_window();

@@ -4,6 +4,6 @@
 #include <linux/if_ether.h>
 
 int iface_lookup(const char *ifname, int *ifindex, unsigned char mac[ETH_ALEN]);
-int iface_alive(const char *ifname, int ifindex);
+int iface_alive(int fd, const char *ifname, int ifindex);
 
 #endif

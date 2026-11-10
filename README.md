@@ -6,8 +6,10 @@ network while it is in use, reporting attacks as tundra-blueice alerts.
 
 ## Requirements
 
-- Linux (uses `AF_PACKET`, `CLOCK_BOOTTIME`).
-- Root (raw ARP sockets).
+- Linux (uses `AF_PACKET`, `CLOCK_BOOTTIME`, seccomp).
+- libseccomp.
+- `CAP_NET_RAW` (raw ARP sockets): root, or the file capability described in
+  [Privileges](#privileges).
 
 ## Usage
 
@@ -92,11 +94,39 @@ differs from the frame source.
 
 Values outside `[A-Za-z0-9._:@,/-]` are written as `%XX`.
 
+## Privileges
+
+The package marks the binary with `setcap cap_net_raw+ei` from the xbps
+`INSTALL` script at the root of this repository (`make install` does not run
+it): only a parent that
+already holds `CAP_NET_RAW` as inheritable (tundra-networkd and its children)
+gets it on exec. Any other user gets nothing and the socket fails. Run by root
+it works without the file capability.
+
+Both commands open their socket and history files first and then, before
+reading the network:
+
+1. Clear every capability set (ambient, inheritable, permitted, effective).
+2. Set `no_new_privs`.
+3. Load a seccomp filter that kills the process on any system call outside
+   its list.
+
+If any step fails the command exits with `1`.
+
+The kernel clears the parent death signal when a binary with file capabilities
+is executed, so the sensor arms it itself:
+
+| `TUNDRA_PARENT_PID` | Effect |
+|---------------------|--------|
+| The PID of the parent | SIGTERM when the parent dies |
+| Another PID (the parent died before the exec) | Ends at once with SIGTERM |
+| Unset or not a PID above 1 | Nothing, silently |
+
 ## Files
 
 | Path | Purpose |
 |------|---------|
-| `/run/tundra/blueice/arp/<if>` | Conflict history (5-minute window): one `at <ms> addr <ip> mac <mac> bound <0\|1> forged <0\|1>` line per record, times in milliseconds of `CLOCK_BOOTTIME` |
+| `/run/tundra/blueice/arp/<if>` | Conflict history (5-minute window): one `at <ms> addr <ip> mac <mac> bound <0\|1> forged <0\|1>` line per record, times in milliseconds of `CLOCK_BOOTTIME`. Created at start and rewritten in place |
 | `/run/tundra/blueice/arp/<if>.lock` | `flock` shared by concurrent writers |
 
 ## Building
@@ -104,7 +134,10 @@ Values outside `[A-Za-z0-9._:@,/-]` are written as `%XX`.
 ```
 make
 make install PREFIX=/usr DESTDIR=<staging>
+setcap cap_net_raw+ei <staging>/usr/bin/tundra-blueice-arp
 ```
+
+Needs the libseccomp headers. `setcap` is only needed to run it without root.
 
 The Makefile honours the packager's `CPPFLAGS`, `CFLAGS` and `LDFLAGS`.
 
@@ -120,6 +153,6 @@ make check
 - `check` runs the unit tests and then the network scenarios
   (`tests/net/t-*.sh`). They build an isolated testbed with network namespaces
   (a bridge, the sensor and an attacker) and never touch the host's
-  interfaces. They need root (the runner re-executes itself with `sudo`) and
-  `iproute2`.
+  interfaces. They need root (the runner re-executes itself with `sudo`),
+  `iproute2`, `setcap`, `setpriv` and a build directory not mounted `nosuid`.
 - The test binary is built with protocol timers divided by 4.

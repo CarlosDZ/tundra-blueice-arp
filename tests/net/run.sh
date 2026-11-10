@@ -2,10 +2,12 @@
 [ "$(id -u)" -eq 0 ] || exec sudo sh "$0" "$@"
 cd "$(dirname "$0")/../.." || exit 1
 
-command -v ip >/dev/null || {
-	echo "missing dependency: ip" >&2
-	exit 1
-}
+for dep in ip setcap setpriv findmnt; do
+	command -v "$dep" >/dev/null || {
+		echo "missing dependency: $dep" >&2
+		exit 1
+	}
+done
 
 rc=0
 for t in tests/net/t-*.sh; do

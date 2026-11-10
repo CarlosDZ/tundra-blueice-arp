@@ -1,4 +1,5 @@
 #include "accept.h"
+#include "parent.h"
 #include "probe.h"
 #include "watch.h"
 
@@ -7,6 +8,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <wchar.h>
 
 struct opts {
 	struct accept acc;
@@ -90,6 +92,8 @@ static int parse_ifname(const char *s) {
 }
 
 int main(int argc, char *argv[]) {
+	parent_bind();
+
 	if (argc == 2 && strcmp(argv[1], "--version") == 0) {
 		printf("tundra-blueice-arp %s\n", TUNDRA_BLUEICE_ARP_VERSION);
 		return 0;
@@ -101,7 +105,12 @@ int main(int argc, char *argv[]) {
 
 	struct opts o;
 	memset(&o, 0, sizeof(o));
-	setvbuf(stdout, NULL, _IOLBF, 0);
+	/* Nothing in stdio may allocate, dup or query the terminal after the
+	 * lockdown: stdout gets its buffer now and stderr its orientation
+	 * (glibc's perror dups an unoriented stderr). */
+	static char outbuf[BUFSIZ];
+	setvbuf(stdout, outbuf, _IOLBF, sizeof(outbuf));
+	fwide(stderr, -1);
 
 	if (strcmp(argv[1], "probe") == 0) {
 		if (parse_ifname(argv[2]) < 0 ||
