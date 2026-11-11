@@ -13,13 +13,13 @@ int decide_probe_conflict(const struct arp_msg *m, uint32_t ip,
 }
 
 const struct alert_def *decide_alert(const char *kase, const struct accept *acc,
-                                     enum action *act) {
+                                     enum blueice_action *act) {
 	const struct alert_def *def = alert_def(kase);
 	if (!def)
 		return NULL;
 	*act = def->action;
-	if (def->action == ACT_STOP && accept_covers(acc, kase, def->level))
-		*act = ACT_WARN;
+	if (def->action == BLUEICE_STOP && accept_covers(acc, kase, def->level))
+		*act = BLUEICE_WARN;
 	return def;
 }
 
@@ -34,7 +34,7 @@ static void add_claim(char *list, size_t size, size_t *len, uint32_t addr,
 }
 
 void decide_claims(struct alert *a, const struct conflicts *cs) {
-	char list[ALERT_INFO_MAX] = "";
+	char list[BLUEICE_INFO_MAX] = "";
 	size_t len = 0;
 	for (int i = 0; i < cs->n; i++)
 		add_claim(list, sizeof(list), &len, cs->recs[i].addr, cs->recs[i].mac);

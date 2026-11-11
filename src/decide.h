@@ -22,7 +22,7 @@ struct warned {
 int decide_probe_conflict(const struct arp_msg *m, uint32_t ip,
                           const unsigned char mine[ETH_ALEN]);
 const struct alert_def *decide_alert(const char *kase, const struct accept *acc,
-                                     enum action *act);
+                                     enum blueice_action *act);
 void decide_claims(struct alert *a, const struct conflicts *cs);
 void decide_addr_info(struct alert *a, enum alert_kind kind,
                       const struct conflicts *cs, uint32_t ip,

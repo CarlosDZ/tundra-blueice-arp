@@ -52,11 +52,11 @@ static void announce(struct watch *w) {
 
 static int report(struct watch *w, struct alert *a,
                   const unsigned char mac[ETH_ALEN]) {
-	enum action act;
+	enum blueice_action act;
 	decide_alert(a->def->kase, w->acc, &act);
-	if (act == ACT_STOP) {
+	if (act == BLUEICE_STOP) {
 		emit_alert(a, act, w->ifname);
-		return ALERT_CODE;
+		return BLUEICE_CODE;
 	}
 	if (decide_warn_once(&w->warned, a->def->kase, mac))
 		emit_alert(a, act, w->ifname);

@@ -40,17 +40,17 @@ static void test_probe_conflict(void) {
 
 static void test_alert(void) {
 	struct accept none = {0}, acc;
-	enum action act;
+	enum blueice_action act;
 
-	CHECK(decide_alert("C", &none, &act) && act == ACT_STOP,
+	CHECK(decide_alert("C", &none, &act) && act == BLUEICE_STOP,
 	      "C stops by default");
 	accept_parse(&acc, "C/6");
-	CHECK(decide_alert("C", &acc, &act) && act == ACT_WARN,
+	CHECK(decide_alert("C", &acc, &act) && act == BLUEICE_WARN,
 	      "an accepted C only warns");
 	accept_parse(&acc, "C/5");
-	CHECK(decide_alert("C", &acc, &act) && act == ACT_STOP,
+	CHECK(decide_alert("C", &acc, &act) && act == BLUEICE_STOP,
 	      "a C above the approved level stops");
-	CHECK(decide_alert("mac-net", &none, &act) && act == ACT_WARN,
+	CHECK(decide_alert("mac-net", &none, &act) && act == BLUEICE_WARN,
 	      "mac-net always warns");
 	CHECK(decide_alert("Z", &none, &act) == NULL, "an unknown case is nothing");
 }
@@ -65,14 +65,14 @@ static void test_info(void) {
 
 	alert_init(&a, "A");
 	decide_claims(&a, &cs);
-	CHECK(strcmp(a.info, "case A claim 10.77.0.1@02:aa:aa:aa:aa:01,"
+	CHECK(strcmp(a.line.info, "case A claim 10.77.0.1@02:aa:aa:aa:aa:01,"
 	                     "10.77.0.2@02:bb:bb:bb:bb:01 forged 1") == 0,
 	      "claims list every record and the forged hint");
 
 	struct arp_msg m = msg(multicast, other, "10.77.0.5", "10.77.0.5");
 	alert_init(&a, "mac-addr");
 	decide_addr_info(&a, ALERT_INVALID_MAC, &cs, inet_addr("10.77.0.5"), &m);
-	CHECK(strcmp(a.info, "case mac-addr ip 10.77.0.5 claim "
+	CHECK(strcmp(a.line.info, "case mac-addr ip 10.77.0.5 claim "
 	                     "10.77.0.5@01:00:5e:00:00:01 src 02:bb:bb:bb:bb:01 "
 	                     "forged 1") == 0,
 	      "mac-addr carries the address, the claim and the frame source");
@@ -122,7 +122,7 @@ static void test_watch_info(void) {
 	conflict_claim(&cs, inet_addr("10.77.0.5"), evil, evil, 1, &k);
 	alert_init(&a, "C");
 	decide_addr_info(&a, ALERT_CLAIMED, &cs, inet_addr("10.77.0.5"), NULL);
-	CHECK(strcmp(a.info, "case C ip 10.77.0.5 claim "
+	CHECK(strcmp(a.line.info, "case C ip 10.77.0.5 claim "
 	                     "10.77.0.5@02:aa:aa:aa:aa:01 forged 0") == 0,
 	      "C carries the address in use and its claims");
 
@@ -133,14 +133,14 @@ static void test_watch_info(void) {
 	g.nseen = 2;
 	alert_init(&a, "D");
 	decide_gw_info(&a, &g, inet_addr("10.77.0.1"), NULL);
-	CHECK(strcmp(a.info, "case D gw 10.77.0.1 known 02:bb:bb:bb:bb:01 seen "
+	CHECK(strcmp(a.line.info, "case D gw 10.77.0.1 known 02:bb:bb:bb:bb:01 seen "
 	                     "02:bb:bb:bb:bb:01,02:aa:aa:aa:aa:01 forged 0") == 0,
 	      "D carries the gateway, the known MAC and every MAC seen");
 
 	struct arp_msg m = msg(multicast, evil, "10.77.0.1", "10.77.0.5");
 	alert_init(&a, "mac-gw");
 	decide_gw_info(&a, &g, inet_addr("10.77.0.1"), &m);
-	CHECK(strcmp(a.info, "case mac-gw gw 10.77.0.1 known 02:bb:bb:bb:bb:01 "
+	CHECK(strcmp(a.line.info, "case mac-gw gw 10.77.0.1 known 02:bb:bb:bb:bb:01 "
 	                     "seen 01:00:5e:00:00:01 src 02:aa:aa:aa:aa:01 "
 	                     "forged 1") == 0,
 	      "mac-gw carries the crafted MAC and the frame source");
@@ -148,7 +148,7 @@ static void test_watch_info(void) {
 	m = msg(multicast, multicast, "10.77.0.9", "10.77.0.9");
 	alert_init(&a, "mac-net");
 	decide_net_info(&a, &m);
-	CHECK(strcmp(a.info, "case mac-net ip 10.77.0.9 sha 01:00:5e:00:00:01 "
+	CHECK(strcmp(a.line.info, "case mac-net ip 10.77.0.9 sha 01:00:5e:00:00:01 "
 	                     "src 01:00:5e:00:00:01 forged 0") == 0,
 	      "mac-net carries the sender and the frame source");
 }

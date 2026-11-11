@@ -3,6 +3,7 @@
 
 #include "alert.h"
 
-void emit_alert(const struct alert *a, enum action act, const char *ifname);
+void emit_alert(const struct alert *a, enum blueice_action act,
+                const char *ifname);
 
 #endif

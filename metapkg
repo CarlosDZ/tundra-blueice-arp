@@ -1,7 +1,7 @@
 name=tundra-blueice-arp
 author=CarlosDZ
-version=0.2_0
-v_date=2026-11-10
+version=0.2_1
+v_date=2026-11-11
 license=GPL-3.0-or-later
-depends=libcap-progs libseccomp
+depends=libcap-progs libseccomp tundra-libblueice>=0.1_0
 description=ARP sensor of tundra-blueice for Tundra OS

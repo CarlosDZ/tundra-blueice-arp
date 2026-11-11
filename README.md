@@ -7,7 +7,8 @@ network while it is in use, reporting attacks as tundra-blueice alerts.
 ## Requirements
 
 - Linux (uses `AF_PACKET`, `CLOCK_BOOTTIME`, seccomp).
-- libseccomp.
+- libseccomp and tundra-libblueice. A checkout of tundra-libblueice next to
+  this one, built, is used instead of an installed one.
 - `CAP_NET_RAW` (raw ARP sockets): root, or the file capability described in
   [Privileges](#privileges).
 

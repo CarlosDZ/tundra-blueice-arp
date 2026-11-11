@@ -9,7 +9,17 @@ TUNDRA_STD  = -std=c11
 TUNDRA_DEFS = -D_GNU_SOURCE -DTUNDRA_BLUEICE_ARP_VERSION=\"$(VERSION)\" \
               -DTUNDRA_BLUEICE_ARP_TIME_SCALE=$(TUNDRA_BLUEICE_ARP_TIME_SCALE)
 TUNDRA_INC  = -Isrc -Isrc/net -Isrc/guard
-TUNDRA_LIBS = -lseccomp
+TUNDRA_LIBS = -lseccomp -ltundra-blueice
+
+# Development: a checkout of tundra-libblueice next to this one, built, is used
+# instead of an installed library.
+BLUEICE_DEV ?= $(wildcard ../tundra-libblueice)
+ifneq ($(BLUEICE_DEV),)
+BLUEICE_BUILD = $(abspath $(BLUEICE_DEV))/build
+TUNDRA_INC  += -I$(BLUEICE_DEV)/include
+TUNDRA_LIBS := -L$(BLUEICE_BUILD) $(TUNDRA_LIBS)
+TEST_RPATH   = -Wl,-rpath,$(BLUEICE_BUILD)
+endif
 
 CFLAGS ?= -Wall -Wextra -O2
 
@@ -46,7 +56,7 @@ TEST_DEFS = -D_GNU_SOURCE -DTUNDRA_BLUEICE_ARP_VERSION=\"$(VERSION)-test\" \
 
 $(TEST_BIN): FORCE
 	@mkdir -p $(dir $@)
-	$(CC) $(TUNDRA_STD) $(CFLAGS) $(TUNDRA_INC) $(TEST_DEFS) -o $@ $(SRCS) $(TUNDRA_LIBS)
+	$(CC) $(TUNDRA_STD) $(CFLAGS) $(TUNDRA_INC) $(TEST_DEFS) -o $@ $(SRCS) $(TUNDRA_LIBS) $(TEST_RPATH)
 
 $(TEST_BUILD)/tools/%: tests/tools/%.c
 	@mkdir -p $(dir $@)
@@ -58,7 +68,8 @@ UNIT_TESTS = $(patsubst tests/unit/%.c,$(TEST_BUILD)/unit/%,$(wildcard tests/uni
 $(TEST_BUILD)/unit/%: tests/unit/%.c tests/unit/test.h $(SRCS) $(HDRS)
 	@mkdir -p $(dir $@)
 	$(CC) $(TUNDRA_STD) $(CFLAGS) $(UNIT_FLAGS) $(TUNDRA_INC) -Itests/unit \
-		-D_GNU_SOURCE -DTUNDRA_BLUEICE_ARP_TIME_SCALE=1 -o $@ $<
+		-D_GNU_SOURCE -DTUNDRA_BLUEICE_ARP_TIME_SCALE=1 -o $@ $< \
+		$(TUNDRA_LIBS) $(TEST_RPATH)
 
 check-unit: $(UNIT_TESTS)
 	@rc=0; for t in $(UNIT_TESTS); do echo "# $$t"; $$t || rc=1; done; exit $$rc

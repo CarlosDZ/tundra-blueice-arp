@@ -34,14 +34,14 @@ static int on_conflict(struct history *h, const char *ifname, uint32_t ip,
 	history_commit(h, &cs);
 
 	if (kind != ALERT_NONE) {
-		enum action act;
+		enum blueice_action act;
 		const struct alert_def *def = decide_alert(alert_case(kind), acc, &act);
 		struct alert a;
 		alert_init(&a, def->kase);
 		decide_addr_info(&a, kind, &cs, ip, m);
 		emit_alert(&a, act, ifname);
-		if (act == ACT_STOP)
-			return ALERT_CODE;
+		if (act == BLUEICE_STOP)
+			return BLUEICE_CODE;
 	}
 	printf("taken mac %s src %s\n", mac_format(m->sha, sha),
 	       mac_format(m->src, src));
